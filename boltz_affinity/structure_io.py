@@ -78,12 +78,85 @@ def _read_any(path: str) -> "gemmi.Structure":
     )
 
 
+def _one_letter(resname: str) -> Optional[str]:
+    info = gemmi.find_tabulated_residue(resname)
+    if info and info.is_amino_acid():
+        return info.one_letter_code.upper()
+    return None
+
+
+def _manual_atom_site_parse(path: str) -> Optional[ParsedStructure]:
+    """Last-resort parser: read the _atom_site loop directly from the CIF and
+    build chains/sequences ourselves. Handles files whose coordinate records are
+    present but which gemmi's Structure builder returns as 0 models."""
+    try:
+        doc = gemmi.cif.read(path)
+    except Exception:
+        return None
+
+    for block in doc:
+        def col(*names):
+            for n in names:
+                c = block.find_loop("_atom_site." + n)
+                if c and len(c):
+                    return list(c)
+            return None
+
+        comp  = col("label_comp_id", "auth_comp_id")
+        chain = col("auth_asym_id", "label_asym_id")
+        seqid = col("auth_seq_id", "label_seq_id")
+        group = col("group_PDB")
+        if not (comp and chain and seqid):
+            continue
+
+        n = len(comp)
+        group = group or ["ATOM"] * n
+        clean = gemmi.cif.as_string
+
+        # ordered unique residues per chain
+        seen, residues = set(), []   # residues: (chain, seqid, comp, is_het)
+        atom_counts: dict = {}
+        for i in range(n):
+            ch = clean(chain[i]); rid = clean(seqid[i]); rn = clean(comp[i])
+            grp = clean(group[i]).upper() if i < len(group) else "ATOM"
+            key = (ch, rid, rn)
+            atom_counts[key] = atom_counts.get(key, 0) + 1
+            if key not in seen:
+                seen.add(key)
+                residues.append((ch, rid, rn, grp == "HETATM"))
+
+        out = ParsedStructure(path=path)
+        by_chain: dict = {}
+        for ch, rid, rn, is_het in residues:
+            by_chain.setdefault(ch, []).append((rid, rn, is_het))
+
+        for ch, reslist in by_chain.items():
+            seq = "".join(filter(None, (_one_letter(rn) for _, rn, het in reslist if not het)))
+            n_res = sum(1 for _, _, het in reslist if not het)
+            if seq:
+                out.chains.append(ParsedChain(ch, "protein", seq, n_res))
+            for rid, rn, het in reslist:
+                if het and _one_letter(rn) is None and rn not in ("HOH", "WAT"):
+                    out.ligands.append(
+                        ParsedLigand(ch, rn, atom_counts.get((ch, rid, rn), 0))
+                    )
+        if out.chains:
+            return out
+    return None
+
+
 def parse_structure(path: str) -> ParsedStructure:
     """Parse a CIF or PDB file into chains + candidate ligands."""
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         raise ValueError(f"'{path}' does not exist or is empty.")
 
-    st = _read_any(path)
+    try:
+        st = _read_any(path)
+    except ValueError:
+        manual = _manual_atom_site_parse(path)
+        if manual is not None and manual.chains:
+            return manual
+        raise
     st.setup_entities()
     model = st[0]
 
