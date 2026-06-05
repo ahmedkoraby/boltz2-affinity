@@ -61,11 +61,14 @@ def run_boltz(
     if extra_args:
         cmd += list(extra_args)
 
+    env = dict(os.environ)
+    env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
     print("Running:", " ".join(cmd), flush=True)
     if stream:
-        proc = subprocess.run(cmd)
+        proc = subprocess.run(cmd, env=env)
     else:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
         print(proc.stdout)
         print(proc.stderr)
     if proc.returncode != 0:
