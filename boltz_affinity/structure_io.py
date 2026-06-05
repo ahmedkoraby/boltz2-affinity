@@ -225,3 +225,108 @@ def summary(parsed: ParsedStructure) -> str:
     else:
         lines.append("Ligand / non-polymer residues: none detected")
     return "\n".join(lines)
+
+
+def rebuild_structure_from_atom_site(path: str):
+    """Build a gemmi.Structure from the raw _atom_site loop (coordinates + names).
+    Used when gemmi can read the columns but won't assemble a model itself."""
+    try:
+        doc = gemmi.cif.read(path)
+    except Exception:
+        return None
+    clean = gemmi.cif.as_string
+
+    for block in doc:
+        def col(*names):
+            for n in names:
+                c = block.find_loop("_atom_site." + n)
+                if c and len(c):
+                    return list(c)
+            return None
+
+        comp  = col("label_comp_id", "auth_comp_id")
+        asym  = col("auth_asym_id", "label_asym_id")
+        seqid = col("auth_seq_id", "label_seq_id")
+        aname = col("label_atom_id", "auth_atom_id")
+        elem  = col("type_symbol")
+        x = col("Cartn_x"); y = col("Cartn_y"); z = col("Cartn_z")
+        group = col("group_PDB")
+        if not (comp and asym and seqid and aname and x and y and z):
+            continue
+
+        n = len(comp)
+        group = group or ["ATOM"] * n
+        st = gemmi.Structure()
+        model = gemmi.Model("1")
+        chains: dict = {}
+        cur_key = None
+        cur_res = None
+
+        for i in range(n):
+            ch_id = clean(asym[i]); rid = clean(seqid[i]); rn = clean(comp[i])
+            an = clean(aname[i]).strip('"')
+            if ch_id not in chains:
+                chains[ch_id] = gemmi.Chain(ch_id)
+                cur_key = None
+            chain = chains[ch_id]
+            key = (ch_id, rid, rn)
+            if key != cur_key:
+                res = gemmi.Residue()
+                res.name = rn
+                try:
+                    res.seqid = gemmi.SeqId(rid)
+                except Exception:
+                    res.seqid = gemmi.SeqId(str(len(chain) + 1))
+                res.het_flag = "H" if (group[i] and clean(group[i]).upper() == "HETATM") else "A"
+                chain.add_residue(res)
+                cur_res = chain[-1]
+                cur_key = key
+            atom = gemmi.Atom()
+            atom.name = an
+            try:
+                atom.element = gemmi.Element(clean(elem[i])) if elem else gemmi.Element(an[0])
+            except Exception:
+                atom.element = gemmi.Element("C")
+            atom.pos = gemmi.Position(float(clean(x[i])), float(clean(y[i])), float(clean(z[i])))
+            cur_res.add_atom(atom)
+
+        for ch in chains.values():
+            model.add_chain(ch)
+        st.add_model(model)
+        if len(st) and len(st[0]):
+            st.setup_entities()
+            return st
+    return None
+
+
+def ensure_template_cif(path: str) -> str:
+    """Return the path to a Boltz-readable mmCIF for templating.
+    - readable CIF  -> returned as-is
+    - readable PDB  -> converted to CIF
+    - unreadable    -> rebuilt from _atom_site coordinates and written as CIF
+    """
+    ext = os.path.splitext(path)[1].lower()
+    st = None
+    try:
+        st = gemmi.read_structure(path)
+    except Exception:
+        st = None
+
+    if st is not None and len(st) > 0:
+        if ext in (".cif", ".mmcif"):
+            return path
+        st.setup_entities()
+        out = os.path.splitext(path)[0] + ".cif"
+        st.make_mmcif_document().write_file(out)
+        return out
+
+    rb = rebuild_structure_from_atom_site(path)
+    if rb is not None and len(rb) > 0:
+        out = os.path.splitext(path)[0] + "_rebuilt.cif"
+        rb.make_mmcif_document().write_file(out)
+        return out
+
+    raise ValueError(
+        f"Could not produce a Boltz-readable template CIF from '{path}'. "
+        "Try uploading a standard PDB instead, or disable templating."
+    )
