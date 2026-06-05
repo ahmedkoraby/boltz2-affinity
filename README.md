@@ -1,5 +1,7 @@
 # Boltz-2 Affinity From Structure
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ahmedkoraby/boltz2-affinity/blob/main/Boltz2_Affinity_From_Structure.ipynb)
+
 Predict **binding affinity from a structure you already have** — including
 **multimer CIFs** — with [Boltz-2](https://github.com/jwohlwend/boltz), while
 keeping a one-click affinity toggle.
@@ -58,13 +60,17 @@ properties:
 ## Quick start
 
 ### Colab notebook (one-click affinity)
-Open `Boltz2_Affinity_From_Structure.ipynb` in Google Colab, set the runtime to
+Click the **Open in Colab** badge above (it loads the notebook straight
+from this repo and the first cell `git clone`s the repo + installs Boltz-2).
+Then set the runtime to
 a GPU, upload your CIF, set the ligand, and run. The notebook auto-detects chains
 and sequences, builds the YAML, runs Boltz-2, and shows the affinity dashboard +
 3D pose.
 
 ### Local / Compute Canada
 ```bash
+git clone https://github.com/ahmedkoraby/boltz2-affinity.git
+cd boltz2-affinity
 pip install -r requirements.txt          # installs boltz, gemmi, etc.
 
 python predict_affinity.py \
@@ -115,7 +121,7 @@ Outputs land in `results/.../predictions/<name>/`:
 
 ## Repo layout
 ```
-boltz2-affinity-from-structure/
+boltz2-affinity/
 ├── Boltz2_Affinity_From_Structure.ipynb   # Colab notebook (main deliverable)
 ├── predict_affinity.py                     # CLI for local/cluster runs
 ├── boltz_affinity/                          # importable library
