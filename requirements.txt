@@ -1,0 +1,8 @@
+# Core
+boltz>=2.0.0          # Boltz-2 (provides the `boltz` CLI and gemmi)
+gemmi>=0.6.5          # structure parsing (CIF/PDB)
+pyyaml>=6.0
+
+# Notebook visualization (optional but used by the notebook)
+py3Dmol>=2.0.0
+matplotlib>=3.7

@@ -1,0 +1,38 @@
+# Example: predict ligand binding affinity using a PROVIDED structure as template.
+#
+# The protein chains (A, B) of your multimer are templated against my_complex.cif.
+# The ligand (C) is supplied as SMILES and flagged as the affinity binder.
+# `force: true` + `threshold` restrains the predicted backbone to your structure.
+#
+# Run:
+#   boltz predict affinity_from_template.yaml --use_msa_server --out_dir results
+#
+version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: MVTPEGNVSLVDESLLVGVTDEDRAVRSAHQFYERLIGLWAPAVMEAAHELG
+  - protein:
+      id: B
+      sequence: MVTPEGNVSLVDESLLVGVTDEDRAVRSAHQFYERLIGLWAPAVMEAAHELG
+  - ligand:
+      id: C
+      smiles: 'N[C@@H](Cc1ccc(O)cc1)C(=O)O'
+
+templates:
+  - cif: my_complex.cif      # <-- your provided structure (CIF recommended over PDB)
+    chain_id: [A, B]         # template both protein chains of the multimer
+    force: true              # restrain backbone toward the template
+    threshold: 5.0           # max allowed deviation (Angstrom)
+
+# Optional but recommended: pin the ligand to the real pocket so the affinity
+# head sees the correct interface. Residue indices are 1-based per chain.
+constraints:
+  - pocket:
+      binder: C
+      contacts: [[A, 12], [A, 34], [B, 18]]
+      max_distance: 6.0
+
+properties:
+  - affinity:
+      binder: C            # affinity is for a single small-molecule ligand only
